@@ -1,8 +1,8 @@
-# Fluxora
+# Pipelix
 
 ### Intelligent Data Pipeline & Anomaly Detection Platform
 
-Fluxora is an end-to-end data engineering and machine learning platform designed to automate **data ingestion, data quality validation, transformation, storage, monitoring, and anomaly detection**.
+Pipelix is an end-to-end data engineering and machine learning platform designed to automate **data ingestion, data quality validation, transformation, storage, monitoring, and anomaly detection**.
 
 The project demonstrates how modern data engineering pipelines can integrate machine learning to identify unusual data patterns and potential data-quality issues.
 
@@ -106,7 +106,7 @@ The project demonstrates how modern data engineering pipelines can integrate mac
 ## 📂 Project Structure
 
 ```text
-Fluxora/
+Pipelix/
 │
 ├── data/
 │   ├── raw/
@@ -127,7 +127,7 @@ Fluxora/
 │   └── model.py
 │
 ├── airflow/
-│   └── fluxora_pipeline.py
+│   └── Pipelix_pipeline.py
 │
 ├── database/
 │   └── schema.sql
@@ -148,7 +148,7 @@ Fluxora/
 
 ## 🔄 Data Pipeline
 
-Fluxora follows an automated ETL workflow:
+Pipelix follows an automated ETL workflow:
 
 ### 1. Extract
 
@@ -188,13 +188,13 @@ The ML pipeline analyzes relevant numerical features and identifies unusual reco
 
 ### 6. Monitor
 
-Pipeline execution and data-quality metrics are displayed through the Fluxora dashboard.
+Pipeline execution and data-quality metrics are displayed through the Pipelix dashboard.
 
 ---
 
 ## 🤖 Machine Learning
 
-Fluxora uses **Isolation Forest** for unsupervised anomaly detection.
+Pipelix uses **Isolation Forest** for unsupervised anomaly detection.
 
 Isolation Forest is suitable for this project because anomaly detection does not always have labeled examples of what constitutes an abnormal record.
 
@@ -226,7 +226,7 @@ The model generates an anomaly score for each record, which is then stored along
 
 ## 📊 Data Quality Monitoring
 
-Fluxora tracks metrics such as:
+Pipelix tracks metrics such as:
 
 ```text
 Total Records       : 1,250,000
@@ -302,7 +302,7 @@ Make sure the following are installed:
 ```bash
 git clone <repository-url>
 
-cd Fluxora
+cd Pipelix
 ```
 
 ### Create a virtual environment
@@ -338,7 +338,7 @@ Create a `.env` file:
 ```env
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_DB=fluxora
+POSTGRES_DB=Pipelix
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=your_password
 ```
