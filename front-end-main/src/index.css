@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-color: theme('colors.ink.700');
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: theme('colors.ink.950');
+    color: theme('colors.ink.100');
+    font-family: theme('fontFamily.sans');
+  }
+
+  ::selection {
+    background-color: rgba(59, 130, 246, 0.25);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.ink.600');
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme('colors.ink.500');
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-ink-850 border border-ink-700 rounded-xl;
+  }
+
+  .card-hover {
+    @apply transition-colors duration-200 hover:border-ink-600;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 select-none;
+  }
+
+  .btn-ghost {
+    @apply text-ink-300 hover:text-ink-50 hover:bg-ink-700;
+  }
+
+  .btn-primary {
+    @apply bg-accent-600 text-white hover:bg-accent-500;
+  }
+
+  .btn-outline {
+    @apply border border-ink-600 text-ink-100 hover:bg-ink-700;
+  }
+
+  .input {
+    @apply bg-ink-800 border border-ink-600 text-ink-100 text-sm rounded-lg px-3 py-2 placeholder:text-ink-400 focus:outline-none focus:border-accent-500 transition-colors;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold tracking-wide uppercase;
+  }
+
+  .table-row-hover {
+    @apply transition-colors duration-100 hover:bg-ink-800/60;
+  }
+}
+
+@layer utilities {
+  .shimmer-bg {
+    background: linear-gradient(90deg, theme('colors.ink.800') 25%, theme('colors.ink.750') 50%, theme('colors.ink.800') 75%);
+    background-size: 200% 100%;
+  }
+}
