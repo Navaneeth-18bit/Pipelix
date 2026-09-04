@@ -1,31 +1,69 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search } from 'lucide-react';
 import DataTable, { type Column } from '@/components/DataTable';
 import Drawer from '@/components/Drawer';
 import StatusBadge from '@/components/StatusBadge';
-import { transactions, formatINR, type Transaction } from '@/data/sampleData';
+import LoadingState from '@/components/LoadingState';
+import ErrorBanner from '@/components/ErrorBanner';
+import {
+  fetchTransactions,
+  fetchTransactionDetails,
+  type TransactionDetails,
+} from '@/api/transactions';
+import { formatINR, type Transaction } from '@/data/sampleData';
 
-const paymentMethods = ['All', 'Credit Card', 'Debit Card', 'UPI', 'Bank Transfer'];
-const locations = ['All', 'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Pune', 'Hyderabad', 'Kolkata'];
+const paymentMethods = ['All', 'Credit Card', 'Debit Card', 'UPI', 'PayPal', 'Bank Transfer'];
+const locations = ['All', 'Web Store', 'Mobile App', 'Enterprise Portal', 'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Pune', 'Hyderabad', 'Kolkata'];
 
 export default function TransactionsPage() {
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('All');
   const [locationFilter, setLocationFilter] = useState('All');
-  const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null);
+  const [transactionsData, setTransactionsData] = useState<Transaction[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredData = useMemo(() => {
-    return transactions.filter((t) => {
-      const matchesSearch =
-        !search ||
-        t.id.toLowerCase().includes(search.toLowerCase()) ||
-        t.customerId.toLowerCase().includes(search.toLowerCase()) ||
-        t.productId.toLowerCase().includes(search.toLowerCase());
-      const matchesPayment = paymentFilter === 'All' || t.paymentMethod === paymentFilter;
-      const matchesLocation = locationFilter === 'All' || t.location === locationFilter;
-      return matchesSearch && matchesPayment && matchesLocation;
-    });
+  const [selectedTxn, setSelectedTxn] = useState<TransactionDetails | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  const loadTransactions = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetchTransactions({
+        search: search.trim() || undefined,
+        paymentMethod: paymentFilter !== 'All' ? paymentFilter : undefined,
+        location: locationFilter !== 'All' ? locationFilter : undefined,
+        limit: 100,
+      });
+      setTransactionsData(res.data);
+      setTotal(res.total);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to fetch transactions');
+    } finally {
+      setLoading(false);
+    }
   }, [search, paymentFilter, locationFilter]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadTransactions();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [loadTransactions]);
+
+  const handleRowClick = async (row: Transaction) => {
+    try {
+      setLoadingDetail(true);
+      const detail = await fetchTransactionDetails(row.id);
+      setSelectedTxn(detail);
+    } catch {
+      setSelectedTxn(row as TransactionDetails);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
 
   const columns: Column<Transaction>[] = [
     {
@@ -92,8 +130,10 @@ export default function TransactionsPage() {
   const detailRows = selectedTxn
     ? [
         { label: 'Transaction ID', value: selectedTxn.id },
-        { label: 'Customer', value: selectedTxn.customerId },
-        { label: 'Product', value: selectedTxn.productId },
+        { label: 'Customer', value: selectedTxn.customerName ? `${selectedTxn.customerName} (${selectedTxn.customerId})` : selectedTxn.customerId },
+        { label: 'Customer Email', value: selectedTxn.customerEmail || '--' },
+        { label: 'Product', value: selectedTxn.productName ? `${selectedTxn.productName} (${selectedTxn.productId})` : selectedTxn.productId },
+        { label: 'Category', value: selectedTxn.productCategory || '--' },
         { label: 'Transaction Date', value: selectedTxn.date },
         { label: 'Quantity', value: String(selectedTxn.quantity) },
         { label: 'Unit Price', value: formatINR(selectedTxn.unitPrice) },
@@ -145,23 +185,30 @@ export default function TransactionsPage() {
         </div>
       </div>
 
+      {error && <ErrorBanner message={error} onRetry={loadTransactions} />}
+
       {/* Table */}
       <div className="card p-5 animate-slide-up">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold text-ink-100">Transaction Records</h3>
             <p className="text-xs text-ink-400 mt-0.5">
-              {filteredData.length} of {transactions.length} transactions
+              {transactionsData.length} records retrieved from PostgreSQL ({total} total)
             </p>
           </div>
         </div>
-        <DataTable
-          columns={columns}
-          data={filteredData}
-          pageSize={8}
-          onRowClick={(row) => setSelectedTxn(row)}
-          emptyMessage="No transactions match your filters"
-        />
+
+        {loading ? (
+          <LoadingState message="Loading transactions from PostgreSQL..." />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={transactionsData}
+            pageSize={8}
+            onRowClick={handleRowClick}
+            emptyMessage="No transactions match your filters"
+          />
+        )}
       </div>
 
       {/* Detail Drawer */}
@@ -172,6 +219,9 @@ export default function TransactionsPage() {
       >
         {selectedTxn && (
           <div className="space-y-5">
+            {loadingDetail && (
+              <p className="text-xs text-ink-400">Loading extended details...</p>
+            )}
             <div className="space-y-2.5">
               {detailRows.map((row) => (
                 <div key={row.label} className="flex items-center justify-between text-sm">
@@ -191,12 +241,26 @@ export default function TransactionsPage() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-ink-400">Anomaly Score</span>
-                <span className={`font-mono text-sm font-semibold ${
-                  selectedTxn.anomalyScore !== null ? 'text-ml-400' : 'text-ink-500'
-                }`}>
+                <span
+                  className={`font-mono text-sm font-semibold ${
+                    selectedTxn.anomalyScore !== null ? 'text-ml-400' : 'text-ink-500'
+                  }`}
+                >
                   {selectedTxn.anomalyScore !== null ? selectedTxn.anomalyScore : 'N/A'}
                 </span>
               </div>
+              {selectedTxn.anomalyDetails && (
+                <div className="rounded-lg bg-ink-800/80 p-3 border border-ink-700 text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-ink-400">Model:</span>
+                    <span className="text-ink-200 font-mono">{selectedTxn.anomalyDetails.model_name} ({selectedTxn.anomalyDetails.model_version})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-400">Detected:</span>
+                    <span className="text-ink-200">{selectedTxn.anomalyDetails.detected_at}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

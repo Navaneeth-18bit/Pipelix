@@ -1,0 +1,7 @@
+transaction_id,customer_id,product_id,transaction_date,quantity,unit_price,total_amount,payment_method,location,created_at
+TXN_9001,CUST_001,PROD_101,2026-09-04 08:02:15,2,29.99,59.98,Credit Card,Web Store,2026-09-04 08:02:15
+TXN_9002,CUST_002,PROD_103,2026-09-04 08:03:10,1,349.0,349.0,PayPal,Web Store,2026-09-04 08:03:10
+TXN_9003,CUST_003,PROD_102,2026-09-04 09:01:05,1,89.5,89.5,Debit Card,Mobile App,2026-09-04 09:01:05
+TXN_9004,CUST_001,PROD_105,2026-09-04 09:01:30,5,45.0,225.0,Credit Card,Web Store,2026-09-04 09:01:30
+TXN_9005,CUST_004,PROD_104,2026-09-04 10:01:12,50,199.99,9999.5,Bank Transfer,Enterprise Portal,2026-09-04 10:01:12
+TXN_9006,CUST_005,PROD_101,2026-09-04 10:01:45,1,29.99,29.99,Credit Card,Mobile App,2026-09-04 10:01:45

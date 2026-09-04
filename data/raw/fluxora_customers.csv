@@ -1,0 +1,6 @@
+customer_id,customer_name,email,city,country,created_at
+CUST_001,Alice Smith,alice.smith@example.com,New York,USA,2026-01-15 10:30:00
+CUST_002,Bob Jones,bob.jones@example.com,London,UK,2026-02-01 14:20:00
+CUST_003,Charlie Brown,charlie.b@example.com,Toronto,Canada,2026-02-18 09:15:00
+CUST_004,Diana Prince,diana.p@example.com,Berlin,Germany,2026-03-05 16:45:00
+CUST_005,Evan Wright,evan.w@example.com,Sydney,Australia,2026-03-22 11:10:00

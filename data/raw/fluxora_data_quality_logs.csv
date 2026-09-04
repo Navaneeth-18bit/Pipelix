@@ -1,0 +1,6 @@
+quality_log_id,pipeline_run_id,table_name,check_type,column_name,invalid_record_count,total_record_count,quality_score,status,error_message,created_at
+501,101,transactions,missing_values,customer_id,0,10000,100.0,PASS,,2026-09-04 08:01:00
+502,101,transactions,negative_or_zero_value,quantity,0,10000,100.0,PASS,,2026-09-04 08:01:05
+503,102,transactions,duplicate_records,transaction_id,0,1250,100.0,PASS,,2026-09-04 09:00:30
+504,103,transactions,invalid_categorical_values,payment_method,20,1100,98.18,WARNING,20 unknown payment method codes found,2026-09-04 10:00:45
+505,103,customers,referential_integrity,customer_id,0,1100,100.0,PASS,,2026-09-04 10:00:50

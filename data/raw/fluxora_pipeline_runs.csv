@@ -1,0 +1,5 @@
+pipeline_run_id,pipeline_name,start_time,end_time,status,records_ingested,records_processed,records_failed,records_anomalous,error_message
+101,fluxora_daily_ingest,2026-09-04 08:00:00,2026-09-04 08:05:12,SUCCESS,10000,9950,50,12,
+102,fluxora_hourly_stream,2026-09-04 09:00:00,2026-09-04 09:01:45,SUCCESS,1250,1250,0,2,
+103,fluxora_hourly_stream,2026-09-04 10:00:00,2026-09-04 10:02:10,WARNING,1100,1080,20,5,20 records failed DQ checks
+104,fluxora_daily_ingest,2026-09-04 11:00:00,,RUNNING,5000,2500,0,0,
