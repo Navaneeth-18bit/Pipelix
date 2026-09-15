@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -11,12 +11,47 @@ import {
 import ChartCard from '@/components/ChartCard';
 import StatusBadge from '@/components/StatusBadge';
 import QualityScore from '@/components/QualityScore';
-import { qualityChecks, qualityTrend, type CheckStatus } from '@/data/sampleData';
+import LoadingState from '@/components/LoadingState';
+import ErrorBanner from '@/components/ErrorBanner';
+import { fetchQualityChecks, fetchQualitySummary, type QualityCheckItem, type QualitySummary } from '@/api/quality';
+import { fetchDashboardTrends, type QualityTrendItem } from '@/api/dashboard';
+import type { CheckStatus } from '@/data/sampleData';
 
 const filters: ('All' | CheckStatus)[] = ['All', 'PASSED', 'WARNING', 'FAILED'];
 
 export default function QualityPage() {
   const [activeFilter, setActiveFilter] = useState<'All' | CheckStatus>('All');
+  const [summary, setSummary] = useState<QualitySummary | null>(null);
+  const [qualityChecks, setQualityChecks] = useState<QualityCheckItem[]>([]);
+  const [qualityTrend, setQualityTrend] = useState<QualityTrendItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [summaryRes, checksRes, trendRes] = await Promise.all([
+        fetchQualitySummary(),
+        fetchQualityChecks(),
+        fetchDashboardTrends(),
+      ]);
+      setSummary(summaryRes);
+      setQualityChecks(checksRes);
+      setQualityTrend(trendRes);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load data quality metrics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (loading) return <LoadingState message="Loading data quality from PostgreSQL..." />;
+  if (error || !summary) return <ErrorBanner message={error || 'Failed to load data quality metrics'} onRetry={loadData} />;
 
   const filteredChecks = activeFilter === 'All'
     ? qualityChecks
@@ -35,7 +70,7 @@ export default function QualityPage() {
           subtitle="Overall quality score and record breakdown"
           className="lg:col-span-2"
         >
-          <QualityScore />
+          <QualityScore summary={summary} />
         </ChartCard>
 
         <ChartCard

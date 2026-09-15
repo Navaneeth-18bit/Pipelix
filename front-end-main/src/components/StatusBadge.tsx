@@ -3,7 +3,7 @@ import type { CheckStatus, PipelineStatus, AnomalyStatus } from '@/data/sampleDa
 type BadgeVariant = CheckStatus | PipelineStatus | AnomalyStatus | 'HEALTHY' | 'STALE' | 'ERROR' | 'VALID' | 'INVALID' | 'ANOMALY';
 
 interface StatusBadgeProps {
-  status: BadgeVariant;
+  status: BadgeVariant | string;
   size?: 'sm' | 'md';
 }
 

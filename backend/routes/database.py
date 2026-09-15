@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List
@@ -52,3 +52,19 @@ def get_database_tables(db: Session = Depends(get_db)):
         )
 
     return result
+
+
+@router.delete("/database/data", summary="Delete All Database Data")
+def delete_all_database_data(confirmation: str, db: Session = Depends(get_db)):
+    """Delete all application data while preserving the database schema."""
+    if confirmation != "DELETE":
+        raise HTTPException(status_code=400, detail="Type DELETE to confirm this operation")
+
+    db.execute(
+        text(
+            "TRUNCATE TABLE anomalies, data_quality_logs, pipeline_runs, "
+            "transactions, customers, products RESTART IDENTITY CASCADE"
+        )
+    )
+    db.commit()
+    return {"message": "All database data deleted successfully"}

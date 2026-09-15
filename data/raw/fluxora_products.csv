@@ -1,6 +1,6 @@
 product_id,product_name,category,unit_price,created_at
-PROD_101,Wireless Ergonomic Mouse,Electronics,29.99,2026-01-01 00:00:00
-PROD_102,Mechanical Gaming Keyboard,Electronics,89.5,2026-01-01 00:00:00
-PROD_103,4K Ultra HD Monitor,Electronics,349.0,2026-01-05 10:00:00
-PROD_104,Noise-Canceling Headphones,Audio,199.99,2026-01-10 12:00:00
-PROD_105,USB-C Multi-Port Hub,Accessories,45.0,2026-01-15 08:30:00
+PROD_106,Smart Fitness Watch,Electronics,199.99,2026-01-01 00:00:00
+PROD_107,Leather Travel Backpack,Accessories,125.00,2026-01-01 00:00:00
+PROD_108,Stainless Steel Water Bottle,Home & Kitchen,24.50,2026-01-01 00:00:00
+PROD_109,Aroma Oil Diffuser,Home & Kitchen,45.00,2026-01-01 00:00:00
+PROD_110,Bluetooth Desk Speaker,Electronics,79.99,2026-01-01 00:00:00

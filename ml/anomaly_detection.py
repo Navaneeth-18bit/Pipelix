@@ -39,6 +39,9 @@ def run_anomaly_detection():
             preds = model.fit_predict(X)  # -1 for anomaly, 1 for normal
             scores = model.decision_function(X)  # lower = more abnormal
 
+            # Anomaly results are derived data, so recompute them for the current transactions.
+            cur.execute("DELETE FROM anomalies;")
+
             anomalies_detected = 0
             for txn_id, pred, score in zip(txn_ids, preds, scores):
                 is_anomaly = bool(pred == -1)
@@ -55,6 +58,19 @@ def run_anomaly_detection():
                     (txn_id, anomaly_score, is_anomaly, "IsolationForest", "v1.0", datetime.now())
                 )
 
+            cur.execute(
+                """
+                UPDATE pipeline_runs
+                SET records_anomalous = %s
+                WHERE pipeline_run_id = (
+                    SELECT pipeline_run_id
+                    FROM pipeline_runs
+                    ORDER BY pipeline_run_id DESC
+                    LIMIT 1
+                );
+                """,
+                (anomalies_detected,),
+            )
             conn.commit()
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Detection complete. Anomalies detected: {anomalies_detected} of {len(txn_ids)} transactions.")
 

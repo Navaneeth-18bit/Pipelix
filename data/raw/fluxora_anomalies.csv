@@ -1,7 +1,0 @@
-anomaly_id,transaction_id,anomaly_score,is_anomaly,model_name,model_version,detected_at
-1001,TXN_9001,0.1254,False,IsolationForest,v1.0,2026-09-04 08:04:00
-1002,TXN_9002,0.0821,False,IsolationForest,v1.0,2026-09-04 08:04:00
-1003,TXN_9003,0.2105,False,IsolationForest,v1.0,2026-09-04 09:01:20
-1004,TXN_9004,-0.045,False,IsolationForest,v1.0,2026-09-04 09:01:40
-1005,TXN_9005,-0.4829,True,IsolationForest,v1.0,2026-09-04 10:01:30
-1006,TXN_9006,0.1982,False,IsolationForest,v1.0,2026-09-04 10:01:50

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRight,
   CheckCircle2,
-  Database,
   GitBranch,
   Loader2,
+  Play,
+  Sparkles,
   XCircle,
 } from 'lucide-react';
 import ChartCard from '@/components/ChartCard';
@@ -12,14 +13,11 @@ import StatusBadge from '@/components/StatusBadge';
 import DataTable, { type Column } from '@/components/DataTable';
 import Drawer from '@/components/Drawer';
 import PipelineTimeline from '@/components/PipelineTimeline';
-import {
-  pipelineStages,
-  pipelineRuns,
-  pipelineTimeline,
-  pipelineThroughput,
-  type PipelineRun,
-  type PipelineStage,
-} from '@/data/sampleData';
+import LoadingState from '@/components/LoadingState';
+import ErrorBanner from '@/components/ErrorBanner';
+import { fetchPipelines, fetchPipelineStages } from '@/api/pipelines';
+import { fetchDashboardThroughput, type ThroughputItem } from '@/api/dashboard';
+import type { PipelineRun, PipelineStage, PipelineStatus, TimelineStage } from '@/data/sampleData';
 import {
   Area,
   AreaChart,
@@ -43,8 +41,116 @@ function StageIcon({ status }: { status: string }) {
   }
 }
 
+const defaultProgram = `pipeline: transactions
+source: data/raw/fluxora_transactions.csv
+steps: ingest, validate, transform, anomaly_detection, load`;
+
+function analyzeProgram(program: string, sampleRecords: string): {
+  run: PipelineRun;
+  stages: PipelineStage[];
+} {
+  const lines = program.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const pipelineName = lines.find((line) => line.toLowerCase().startsWith('pipeline:'))
+    ?.split(':').slice(1).join(':').trim() || 'custom pipeline';
+  const stepLine = lines.find((line) => line.toLowerCase().startsWith('steps:'))
+    ?.split(':').slice(1).join(':') || '';
+  const requestedSteps = stepLine.split(',').map((step) => step.trim()).filter(Boolean);
+  const stepNames = requestedSteps.length > 0
+    ? requestedSteps.map((step) => step.replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()))
+    : ['Ingestion', 'Validation', 'Transformation', 'Anomaly Detection', 'PostgreSQL'];
+  const inputRows = sampleRecords.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const recordsIngested = inputRows.length > 1 ? inputRows.length - 1 : Math.max(1, lines.length * 12);
+  const failedRecords = inputRows.filter((line) => /error|invalid|null|missing/i.test(line)).length;
+  const anomalies = inputRows.filter((line) => /anomal|fraud|outlier|suspicious/i.test(line)).length;
+  const recordsProcessed = Math.max(0, recordsIngested - failedRecords);
+  const status: PipelineStatus = failedRecords > 0 ? 'WARNING' : 'SUCCESS';
+  const durationSeconds = Math.max(3, stepNames.length * 2 + Math.ceil(recordsIngested / 100));
+  const stages = stepNames.map((name, index) => ({
+    name,
+    status: index === 1 && failedRecords > 0 ? 'WARNING' : 'SUCCESS',
+    duration: `${Math.max(1, Math.round(durationSeconds / stepNames.length))}.${index + 1}s`,
+    records: index === 0 ? recordsIngested : recordsProcessed,
+    errors: index === 1 ? failedRecords : 0,
+  }));
+
+  return {
+    run: {
+      runId: 'PREVIEW',
+      pipeline: pipelineName,
+      startTime: 'Not started',
+      endTime: null,
+      duration: `${durationSeconds}s est.`,
+      recordsIngested,
+      recordsProcessed,
+      failedRecords,
+      anomalies,
+      status,
+      errorMessage: failedRecords > 0 ? 'Input contains records that need validation.' : null,
+    },
+    stages,
+  };
+}
+
 export default function PipelinesPage() {
   const [selectedRun, setSelectedRun] = useState<PipelineRun | null>(null);
+  const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
+  const [pipelineThroughput, setPipelineThroughput] = useState<ThroughputItem[]>([]);
+  const [pipelineTimeline, setPipelineTimeline] = useState<TimelineStage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [program, setProgram] = useState(defaultProgram);
+  const [sampleRecords, setSampleRecords] = useState('transaction_id,amount,status\nTX-1001,1250.50,completed\nTX-1002,980.00,completed');
+  const [previewRun, setPreviewRun] = useState<PipelineRun | null>(null);
+  const [previewStages, setPreviewStages] = useState<PipelineStage[]>([]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [runsRes, throughputRes] = await Promise.all([
+        fetchPipelines(),
+        fetchDashboardThroughput(),
+      ]);
+      setPipelineRuns(runsRes);
+      setPipelineThroughput(throughputRes);
+      if (runsRes.length > 0) {
+        const stages = await fetchPipelineStages(Number(runsRes[0].runId.replace('#', '')));
+        setPipelineStages(stages);
+        setPipelineTimeline(stages.map((stage) => ({
+          label: stage.name,
+          detail: `${stage.records.toLocaleString()} records, ${stage.errors} errors`,
+          time: stage.duration,
+          status: stage.status,
+        })));
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load pipeline data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleAnalyze = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const preview = analyzeProgram(program, sampleRecords);
+    setPreviewRun(preview.run);
+    setPreviewStages(preview.stages);
+    setPipelineStages(preview.stages);
+    setPipelineTimeline(preview.stages.map((stage) => ({
+      label: stage.name,
+      detail: `${stage.records.toLocaleString()} records, ${stage.errors} errors`,
+      time: stage.duration,
+      status: stage.status,
+    })));
+  };
+
+  if (loading) return <LoadingState message="Loading pipelines from PostgreSQL..." />;
+  if (error) return <ErrorBanner message={error} onRetry={loadData} />;
 
   const columns: Column<PipelineRun>[] = [
     {
@@ -118,6 +224,77 @@ export default function PipelinesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Model-assisted input preview */}
+      <div className="card p-5 animate-slide-up">
+        <div className="flex flex-col gap-1 mb-5">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-accent-400" />
+            <h3 className="text-sm font-semibold text-ink-100">Try a pipeline input</h3>
+            <span className="badge bg-accent-500/10 text-accent-300">Preview</span>
+          </div>
+          <p className="text-xs text-ink-400">Describe the program and paste sample rows. The model preview fills the operational columns before a run is started.</p>
+        </div>
+        <form onSubmit={handleAnalyze} className="grid gap-4 lg:grid-cols-[1.2fr_1fr_auto] lg:items-end">
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-ink-300">Program or pipeline configuration</span>
+            <textarea
+              className="input min-h-32 w-full resize-y font-mono text-xs leading-5"
+              value={program}
+              onChange={(event) => setProgram(event.target.value)}
+              placeholder="pipeline: orders\nsteps: ingest, validate, load"
+              required
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-ink-300">Sample input rows (optional)</span>
+            <textarea
+              className="input min-h-32 w-full resize-y font-mono text-xs leading-5"
+              value={sampleRecords}
+              onChange={(event) => setSampleRecords(event.target.value)}
+              placeholder="Paste CSV or log rows here"
+            />
+          </label>
+          <button type="submit" className="btn btn-primary h-10 whitespace-nowrap">
+            <Play size={15} />
+            Analyze input
+          </button>
+        </form>
+        {previewRun && (
+          <div className="mt-5 overflow-x-auto rounded-lg border border-ink-700">
+            <div className="flex items-center justify-between border-b border-ink-700 bg-ink-800/70 px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold text-ink-100">Generated operation columns</p>
+                <p className="text-xs text-ink-400">Estimated locally from the supplied program and rows</p>
+              </div>
+              <StatusBadge status={previewRun.status} />
+            </div>
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-ink-800 text-ink-400">
+                <tr>
+                  {['Pipeline', 'Duration', 'Ingested', 'Processed', 'Failed', 'Anomalies', 'Status'].map((header) => (
+                    <th key={header} className="whitespace-nowrap px-4 py-3 font-medium">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="text-ink-200">
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-ink-100">{previewRun.pipeline}</td>
+                  <td className="whitespace-nowrap px-4 py-3 font-mono">{previewRun.duration}</td>
+                  <td className="px-4 py-3">{previewRun.recordsIngested.toLocaleString()}</td>
+                  <td className="px-4 py-3">{previewRun.recordsProcessed.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-warning-400">{previewRun.failedRecords}</td>
+                  <td className="px-4 py-3 text-ml-400">{previewRun.anomalies}</td>
+                  <td className="px-4 py-3"><StatusBadge status={previewRun.status} /></td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="border-t border-ink-700 px-4 py-3 text-xs text-ink-400">
+              {previewStages.length} stages inferred. This preview does not write to PostgreSQL.
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Status banner */}
       <div className="card p-4 flex items-center gap-3 animate-slide-up">
         <span className="relative flex h-3 w-3">
@@ -125,8 +302,8 @@ export default function PipelinesPage() {
           <span className="relative inline-flex h-3 w-3 rounded-full bg-success-500" />
         </span>
         <div>
-          <p className="text-sm font-semibold text-ink-100">Pipeline Operational</p>
-          <p className="text-xs text-ink-400">All pipeline stages are running normally</p>
+          <p className="text-sm font-semibold text-ink-100">{pipelineRuns[0]?.status || 'No pipeline runs'}</p>
+          <p className="text-xs text-ink-400">{pipelineRuns.length} runs loaded from PostgreSQL</p>
         </div>
       </div>
 

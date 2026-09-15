@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
-import { systemServices } from '@/data/sampleData';
+import LoadingState from '@/components/LoadingState';
+import ErrorBanner from '@/components/ErrorBanner';
+import { fetchHealth, type HealthStatus } from '@/api/health';
 
 function ServiceIcon({ status }: { status: string }) {
   switch (status) {
@@ -34,9 +37,34 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function SystemPage() {
-  const allOperational = systemServices.every(
-    (s) => s.status === 'Connected' || s.status === 'Operational' || s.status === 'Available' || s.status === 'Running'
-  );
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setHealth(await fetchHealth());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load system health');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (loading) return <LoadingState message="Loading system health..." />;
+  if (error || !health) return <ErrorBanner message={error || 'System health unavailable'} onRetry={loadData} />;
+
+  const services = [
+    { name: 'Pipelix API', status: health.status, detail: 'Backend service health' },
+    { name: 'PostgreSQL', status: health.database, detail: 'Database connectivity' },
+  ];
+  const allOperational = health.status === 'healthy' && health.database === 'connected';
 
   return (
     <div className="space-y-6">
@@ -49,7 +77,7 @@ export default function SystemPage() {
               {allOperational ? 'All Systems Operational' : 'Some Systems Degraded'}
             </p>
             <p className="text-xs text-ink-400 mt-0.5">
-              {systemServices.length} services monitored
+              {services.length} services monitored
             </p>
           </div>
         </div>
@@ -57,7 +85,7 @@ export default function SystemPage() {
 
       {/* Service Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {systemServices.map((service) => (
+        {services.map((service) => (
           <div key={service.name} className="card card-hover p-5 animate-slide-up">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2.5">

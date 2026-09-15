@@ -19,7 +19,7 @@ export async function apiClient<T>(endpoint: string, options?: RequestInit): Pro
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...(options?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...(options?.headers || {}),
       },
     });

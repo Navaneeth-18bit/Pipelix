@@ -1,5 +1,6 @@
 import os
 import csv
+import sys
 from datetime import datetime
 from dotenv import load_dotenv
 import psycopg
@@ -8,6 +9,9 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgresql@127.0.0.1:5432/pipelix_db")
 RAW_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "raw")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(RAW_DATA_DIR))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # Normalize SQLAlchemy URL to psycopg connection string
 conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
@@ -68,70 +72,15 @@ def seed():
                         )
                 print("Transactions seeded.")
 
-            # 4. Pipeline Runs
-            pipeline_csv = os.path.join(RAW_DATA_DIR, "fluxora_pipeline_runs.csv")
-            if os.path.exists(pipeline_csv):
-                with open(pipeline_csv, mode="r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        end_time = row["end_time"] if row["end_time"] else None
-                        cur.execute(
-                            """
-                            INSERT INTO pipeline_runs (pipeline_run_id, pipeline_name, start_time, end_time, status, records_ingested, records_processed, records_failed, records_anomalous, error_message)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (pipeline_run_id) DO NOTHING;
-                            """,
-                            (
-                                int(row["pipeline_run_id"]), row["pipeline_name"], row["start_time"],
-                                end_time, row["status"], int(row["records_ingested"]),
-                                int(row["records_processed"]), int(row["records_failed"]),
-                                int(row["records_anomalous"]), row.get("error_message") or None
-                            )
-                        )
-                print("Pipeline runs seeded.")
-
-            # 5. Data Quality Logs
-            dq_csv = os.path.join(RAW_DATA_DIR, "fluxora_data_quality_logs.csv")
-            if os.path.exists(dq_csv):
-                with open(dq_csv, mode="r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        cur.execute(
-                            """
-                            INSERT INTO data_quality_logs (quality_log_id, pipeline_run_id, table_name, check_type, column_name, invalid_record_count, total_record_count, quality_score, status, error_message, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (quality_log_id) DO NOTHING;
-                            """,
-                            (
-                                int(row["quality_log_id"]), int(row["pipeline_run_id"]), row["table_name"],
-                                row["check_type"], row["column_name"], int(row["invalid_record_count"]),
-                                int(row["total_record_count"]), float(row["quality_score"]),
-                                row["status"], row.get("error_message") or None, row["created_at"]
-                            )
-                        )
-                print("Data quality logs seeded.")
-
-            # 6. Anomalies
-            anomaly_csv = os.path.join(RAW_DATA_DIR, "fluxora_anomalies.csv")
-            if os.path.exists(anomaly_csv):
-                with open(anomaly_csv, mode="r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        cur.execute(
-                            """
-                            INSERT INTO anomalies (anomaly_id, transaction_id, anomaly_score, is_anomaly, model_name, model_version, detected_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (anomaly_id) DO NOTHING;
-                            """,
-                            (
-                                int(row["anomaly_id"]), row["transaction_id"], float(row["anomaly_score"]),
-                                row["is_anomaly"].lower() == "true", row["model_name"], row["model_version"], row["detected_at"]
-                            )
-                        )
-                print("Anomalies seeded.")
-
         conn.commit()
     print("Database seeding completed successfully.")
+
+    # Derive operational results from the three source tables.
+    from etl.data_pipeline import run_etl_pipeline
+    from ml.anomaly_detection import run_anomaly_detection
+
+    run_etl_pipeline()
+    run_anomaly_detection()
 
 if __name__ == "__main__":
     seed()

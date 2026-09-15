@@ -1,11 +1,23 @@
 import { apiClient } from './client';
-import type { Transaction, TxnStatus } from '@/data/sampleData';
+import type { Transaction } from '@/data/sampleData';
 
 export interface PaginatedTransactions {
   data: Transaction[];
-  page: int;
-  limit: int;
-  total: int;
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface TransactionImportResult {
+  status: 'imported' | 'rejected';
+  filename: string;
+  total_rows: number;
+  imported_rows: number;
+  rejected_rows: number;
+  csv_saved_as?: string;
+  processing_status?: 'completed' | 'failed';
+  processing_error?: string | null;
+  errors: Array<{ row?: number; message: string }>;
 }
 
 export interface TransactionDetails extends Transaction {
@@ -49,4 +61,13 @@ export async function fetchTransactions(params: TransactionQueryParams = {}): Pr
 
 export async function fetchTransactionDetails(id: string): Promise<TransactionDetails> {
   return apiClient<TransactionDetails>(`/api/transactions/${id}`);
+}
+
+export async function importTransactions(file: File): Promise<TransactionImportResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiClient<TransactionImportResult>('/api/transactions/import', {
+    method: 'POST',
+    body: formData,
+  });
 }

@@ -1,6 +1,30 @@
-import { Settings, Bell, Shield, Palette, Database as DbIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Settings, Bell, Shield, Palette, Trash2 } from 'lucide-react';
+import { deleteAllDatabaseData } from '@/api/database';
 
 export default function SettingsPage() {
+  const [confirmation, setConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleDeleteAllData = async () => {
+    if (confirmation !== 'DELETE') return;
+
+    try {
+      setDeleting(true);
+      setMessage(null);
+      setError(null);
+      const result = await deleteAllDatabaseData();
+      setMessage(result.message);
+      setConfirmation('');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete database data');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl space-y-6">
       <div className="card p-5 animate-slide-up">
@@ -89,6 +113,38 @@ export default function SettingsPage() {
             <div className="h-8 w-8 rounded-lg bg-gray-100 border-2 border-transparent" />
           </div>
         </div>
+      </div>
+
+      <div className="card border border-red-900/60 p-5 animate-slide-up">
+        <div className="flex items-center gap-2.5 mb-2">
+          <Trash2 size={18} className="text-red-400" />
+          <h3 className="text-sm font-semibold text-red-300">Danger Zone</h3>
+        </div>
+        <p className="text-xs text-ink-400 mb-4">
+          Permanently delete customers, products, transactions, pipeline runs, quality logs, and anomalies.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label className="text-xs text-ink-400">Type DELETE to confirm</label>
+            <input
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              className="input mt-1.5 w-full"
+              placeholder="DELETE"
+              aria-label="Type DELETE to confirm database deletion"
+            />
+          </div>
+          <button
+            type="button"
+            className="btn border border-red-700 bg-red-950/40 text-red-300 hover:bg-red-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={confirmation !== 'DELETE' || deleting}
+            onClick={handleDeleteAllData}
+          >
+            {deleting ? 'Deleting...' : 'Delete all data'}
+          </button>
+        </div>
+        {message && <p className="mt-3 text-xs text-emerald-400">{message}</p>}
+        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
       </div>
     </div>
   );

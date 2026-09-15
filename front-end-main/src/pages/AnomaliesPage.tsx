@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -18,26 +18,63 @@ import ChartCard from '@/components/ChartCard';
 import DataTable, { type Column } from '@/components/DataTable';
 import Drawer from '@/components/Drawer';
 import StatusBadge from '@/components/StatusBadge';
+import LoadingState from '@/components/LoadingState';
+import ErrorBanner from '@/components/ErrorBanner';
 import {
-  anomalyKpis,
-  anomalies,
-  normalScatter,
   formatINR,
   type AnomalyRecord,
+  type KpiMetric,
 } from '@/data/sampleData';
-
-const distributionData = [
-  { name: 'Normal', count: 9873, fill: '#3b82f6' },
-  { name: 'Anomalous', count: 127, fill: '#8b5cf6' },
-];
-
-const scatterData = [
-  ...normalScatter.map((p) => ({ ...p, type: 'normal' })),
-  ...anomalies.map((a) => ({ amount: a.amount, score: a.score, id: a.transactionId, type: 'anomaly' })),
-];
+import { fetchAnomalies, fetchAnomalyScatter } from '@/api/anomalies';
+import { fetchDashboardSummary } from '@/api/dashboard';
 
 export default function AnomaliesPage() {
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyRecord | null>(null);
+  const [anomalies, setAnomalies] = useState<AnomalyRecord[]>([]);
+  const [anomalyTotal, setAnomalyTotal] = useState(0);
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [scatterData, setScatterData] = useState<Array<{ amount: number; score: number; id: string; type: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [anomalyRes, scatterRes, summaryRes] = await Promise.all([
+        fetchAnomalies({ limit: 100 }),
+        fetchAnomalyScatter(),
+        fetchDashboardSummary(),
+      ]);
+      setAnomalies(anomalyRes.data);
+      setAnomalyTotal(anomalyRes.total);
+      setTotalTransactions(summaryRes.total_transactions);
+      setScatterData(scatterRes.map((point) => ({ ...point, type: point.type })));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load anomaly data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (loading) return <LoadingState message="Loading anomaly data from PostgreSQL..." />;
+  if (error) return <ErrorBanner message={error} onRetry={loadData} />;
+
+  const anomalyKpis: KpiMetric[] = [
+    { label: 'Anomalies Detected', value: anomalyTotal.toLocaleString(), supporting: 'Live ML detections', trend: anomalyTotal > 0 ? 'down' : 'neutral', trendValue: anomalyTotal > 0 ? 'Review' : 'None' },
+    { label: 'Normal Transactions', value: Math.max(0, totalTransactions - anomalyTotal).toLocaleString(), supporting: 'Transactions without anomalies', trend: 'up', trendValue: 'Live' },
+    { label: 'Anomaly Rate', value: `${totalTransactions ? ((anomalyTotal / totalTransactions) * 100).toFixed(2) : '0.00'}%`, supporting: 'Of all transactions', trend: 'neutral', trendValue: 'Live' },
+    { label: 'Scatter Points', value: scatterData.length.toLocaleString(), supporting: 'Model analysis points', trend: 'neutral', trendValue: 'Live' },
+  ];
+
+  const distributionData = [
+    { name: 'Normal', count: Math.max(0, totalTransactions - anomalyTotal), fill: '#3b82f6' },
+    { name: 'Anomalous', count: anomalyTotal, fill: '#8b5cf6' },
+  ];
 
   const kpisWithAccent: Array<'violet' | 'blue' | 'green' | 'amber'> = ['violet', 'blue', 'violet', 'amber'];
 

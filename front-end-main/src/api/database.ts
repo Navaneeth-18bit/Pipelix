@@ -15,3 +15,9 @@ export async function fetchDatabaseStatus(): Promise<DatabaseStatus> {
 export async function fetchDatabaseTables(): Promise<DbTable[]> {
   return apiClient<DbTable[]>('/api/database/tables');
 }
+
+export async function deleteAllDatabaseData(): Promise<{ message: string }> {
+  return apiClient<{ message: string }>('/api/database/data?confirmation=DELETE', {
+    method: 'DELETE',
+  });
+}

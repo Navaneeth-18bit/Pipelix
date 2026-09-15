@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search } from 'lucide-react';
+import { FileUp, Search } from 'lucide-react';
 import DataTable, { type Column } from '@/components/DataTable';
 import Drawer from '@/components/Drawer';
 import StatusBadge from '@/components/StatusBadge';
@@ -8,6 +8,7 @@ import ErrorBanner from '@/components/ErrorBanner';
 import {
   fetchTransactions,
   fetchTransactionDetails,
+  importTransactions,
   type TransactionDetails,
 } from '@/api/transactions';
 import { formatINR, type Transaction } from '@/data/sampleData';
@@ -26,6 +27,8 @@ export default function TransactionsPage() {
 
   const [selectedTxn, setSelectedTxn] = useState<TransactionDetails | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   const loadTransactions = useCallback(async () => {
     try {
@@ -39,8 +42,8 @@ export default function TransactionsPage() {
       });
       setTransactionsData(res.data);
       setTotal(res.total);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to fetch transactions');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch transactions');
     } finally {
       setLoading(false);
     }
@@ -62,6 +65,33 @@ export default function TransactionsPage() {
       setSelectedTxn(row as TransactionDetails);
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      setImporting(true);
+      setImportMessage(null);
+      const result = await importTransactions(file);
+      if (result.status === 'imported') {
+        setImportMessage(
+          result.processing_status === 'completed'
+            ? `${result.imported_rows} transaction rows imported. Pipeline run, quality log, and anomaly detection completed.`
+            : `${result.imported_rows} transaction rows imported, but derived processing failed: ${result.processing_error || 'unknown error'}`
+        );
+        await loadTransactions();
+      } else {
+        const firstError = result.errors[0]?.message || 'CSV validation failed.';
+        setImportMessage(`Import rejected: ${firstError}`);
+      }
+    } catch (err: unknown) {
+      setImportMessage(err instanceof Error ? err.message : 'Transaction import failed.');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -147,7 +177,7 @@ export default function TransactionsPage() {
     <div className="space-y-6">
       {/* Filters */}
       <div className="card p-4 animate-slide-up">
-        <div className="flex flex-col lg:flex-row gap-3">
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input
@@ -181,8 +211,14 @@ export default function TransactionsPage() {
                 </option>
               ))}
             </select>
+            <label className="btn-primary cursor-pointer inline-flex items-center gap-2 whitespace-nowrap">
+              <FileUp size={16} />
+              {importing ? 'Importing...' : 'Import CSV'}
+              <input type="file" accept=".csv,text/csv" onChange={handleImport} disabled={importing} className="sr-only" />
+            </label>
           </div>
         </div>
+        {importMessage && <p className="text-xs text-ink-300 mt-3">{importMessage}</p>}
       </div>
 
       {error && <ErrorBanner message={error} onRetry={loadTransactions} />}

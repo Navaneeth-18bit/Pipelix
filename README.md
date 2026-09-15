@@ -1,3 +1,4 @@
+-- Active: 1788499838907@@127.0.0.1@5432@pipelix_db
 # Pipelix
 
 ### Intelligent Data Pipeline & Anomaly Detection Platform
@@ -431,9 +432,9 @@ This project is designed to demonstrate practical knowledge of:
 
 Computer Science & Engineering Student
 
-GitHub: `<your-github-profile>`
+GitHub: `https://github.com/Navaneeth-18bit`
 
-LinkedIn: `<your-linkedin-profile>`
+LinkedIn: `https://www.linkedin.com/in/navaneeth-raj-a68703292/`
 
 ---
 

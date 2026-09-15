@@ -1,8 +1,38 @@
+import { useEffect, useState } from 'react';
 import { Database, Server, HardDrive, Clock } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
-import { dbInfo, dbTables } from '@/data/sampleData';
+import LoadingState from '@/components/LoadingState';
+import ErrorBanner from '@/components/ErrorBanner';
+import { fetchDatabaseStatus, fetchDatabaseTables, type DatabaseStatus } from '@/api/database';
+import type { DbTable } from '@/data/sampleData';
 
 export default function DatabasePage() {
+  const [dbInfo, setDbInfo] = useState<DatabaseStatus | null>(null);
+  const [dbTables, setDbTables] = useState<DbTable[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [status, tables] = await Promise.all([fetchDatabaseStatus(), fetchDatabaseTables()]);
+      setDbInfo(status);
+      setDbTables(tables);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load database information');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (loading) return <LoadingState message="Loading database information..." />;
+  if (error || !dbInfo) return <ErrorBanner message={error || 'Database information unavailable'} onRetry={loadData} />;
+
   return (
     <div className="space-y-6">
       {/* Connection Info */}
@@ -14,9 +44,9 @@ export default function DatabasePage() {
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h3 className="text-base font-semibold text-ink-50">PostgreSQL</h3>
-              <StatusBadge status="SUCCESS" />
+              <StatusBadge status={dbInfo.status === 'connected' ? 'SUCCESS' : 'FAILED'} />
             </div>
-            <p className="text-xs text-ink-400 mt-0.5">Connection established</p>
+            <p className="text-xs text-ink-400 mt-0.5">{dbInfo.status}</p>
           </div>
         </div>
 
@@ -26,7 +56,7 @@ export default function DatabasePage() {
               <Database size={14} className="text-ink-400" />
               <span className="text-xs text-ink-400">Database</span>
             </div>
-            <p className="text-sm font-semibold text-ink-100 font-mono">{dbInfo.name}</p>
+            <p className="text-sm font-semibold text-ink-100 font-mono">{dbInfo.database}</p>
           </div>
           <div className="rounded-lg border border-ink-700 bg-ink-800 p-4">
             <div className="flex items-center gap-2 mb-1">
