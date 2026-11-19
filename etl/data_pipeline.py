@@ -1,94 +1,88 @@
-import os
 import csv
+import os
 from datetime import datetime
 from dotenv import load_dotenv
-import psycopg
+
+from backend.database import get_supabase
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgresql@127.0.0.1:5432/pipelix_db")
 RAW_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "raw")
-conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+
 
 def run_etl_pipeline():
-    """Executes the data pipeline: Ingestion -> Validation -> Storage -> Quality Logging."""
     start_time = datetime.now()
+    db = get_supabase()
     print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] Starting Pipelix ETL Pipeline...")
 
-    with psycopg.connect(conn_str) as conn:
-        with conn.cursor() as cur:
-            # 1. Create pipeline_run entry
-            cur.execute(
-                """
-                INSERT INTO pipeline_runs (pipeline_name, start_time, status, records_ingested, records_processed, records_failed, records_anomalous)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                RETURNING pipeline_run_id;
-                """,
-                ("pipelix_automated_etl", start_time, "RUNNING", 0, 0, 0, 0)
-            )
-            run_id = cur.fetchone()[0]
-            conn.commit()
+    run_response = db.table("pipeline_runs").insert({
+        "pipeline_name": "pipelix_automated_etl",
+        "start_time": start_time.isoformat(),
+        "status": "RUNNING",
+        "records_ingested": 0,
+        "records_processed": 0,
+        "records_failed": 0,
+        "records_anomalous": 0,
+    }).execute()
+    run_id = run_response.data[0]["pipeline_run_id"]
 
-            # 2. Ingest transactions from CSV
-            txn_csv = os.path.join(RAW_DATA_DIR, "fluxora_transactions.csv")
-            ingested_count = 0
-            processed_count = 0
-            failed_count = 0
+    txn_csv = os.path.join(RAW_DATA_DIR, "fluxora_transactions.csv")
+    ingested_count = 0
+    processed_count = 0
+    failed_count = 0
 
-            if os.path.exists(txn_csv):
-                with open(txn_csv, mode="r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        ingested_count += 1
-                        try:
-                            qty = int(row["quantity"])
-                            price = float(row["unit_price"])
-                            if qty <= 0 or price <= 0:
-                                failed_count += 1
-                                continue
+    if os.path.exists(txn_csv):
+        with open(txn_csv, "r", encoding="utf-8-sig", newline="") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                ingested_count += 1
+                try:
+                    quantity = int(row["quantity"])
+                    unit_price = float(row["unit_price"])
+                    if quantity <= 0 or unit_price <= 0:
+                        failed_count += 1
+                        continue
+                    payload = {
+                        "transaction_id": row["transaction_id"].strip(),
+                        "customer_id": row["customer_id"].strip(),
+                        "product_id": row["product_id"].strip(),
+                        "transaction_date": row["transaction_date"].strip(),
+                        "quantity": quantity,
+                        "unit_price": unit_price,
+                        "payment_method": row["payment_method"].strip(),
+                        "location": (row.get("location") or "").strip() or None,
+                        "created_at": (row.get("created_at") or "").strip() or start_time.isoformat(),
+                    }
+                    db.table("transactions").upsert(payload, on_conflict="transaction_id").execute()
+                    processed_count += 1
+                except Exception:
+                    failed_count += 1
 
-                            cur.execute(
-                                """
-                                INSERT INTO transactions (transaction_id, customer_id, product_id, transaction_date, quantity, unit_price, payment_method, location, created_at)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (transaction_id) DO UPDATE 
-                                SET quantity = EXCLUDED.quantity, unit_price = EXCLUDED.unit_price;
-                                """,
-                                (
-                                    row["transaction_id"], row["customer_id"], row["product_id"],
-                                    row["transaction_date"], qty, price,
-                                    row["payment_method"], row["location"], row["created_at"]
-                                )
-                            )
-                            processed_count += 1
-                        except Exception as e:
-                            failed_count += 1
+    quality_score = round((ingested_count - failed_count) / ingested_count * 100, 2) if ingested_count else 100.0
+    dq_status = "PASS" if failed_count == 0 else ("WARNING" if quality_score >= 90 else "FAIL")
+    db.table("data_quality_logs").insert({
+        "pipeline_run_id": run_id,
+        "table_name": "transactions",
+        "check_type": "validation_check",
+        "column_name": "all_columns",
+        "invalid_record_count": failed_count,
+        "total_record_count": ingested_count,
+        "quality_score": quality_score,
+        "status": dq_status,
+        "created_at": datetime.now().isoformat(),
+    }).execute()
 
-            # 3. Log Data Quality check
-            quality_score = round(((ingested_count - failed_count) / ingested_count * 100), 2) if ingested_count > 0 else 100.0
-            dq_status = "PASS" if failed_count == 0 else ("WARNING" if quality_score >= 90 else "FAIL")
+    end_time = datetime.now()
+    db.table("pipeline_runs").update({
+        "end_time": end_time.isoformat(),
+        "status": "SUCCESS" if failed_count == 0 else "WARNING",
+        "records_ingested": ingested_count,
+        "records_processed": processed_count,
+        "records_failed": failed_count,
+    }).eq("pipeline_run_id", run_id).execute()
 
-            cur.execute(
-                """
-                INSERT INTO data_quality_logs (pipeline_run_id, table_name, check_type, column_name, invalid_record_count, total_record_count, quality_score, status, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
-                """,
-                (run_id, "transactions", "validation_check", "all_columns", failed_count, ingested_count, quality_score, dq_status, datetime.now())
-            )
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ETL Pipeline #{run_id} completed.")
 
-            # 4. Finish pipeline run
-            end_time = datetime.now()
-            cur.execute(
-                """
-                UPDATE pipeline_runs
-                SET end_time = %s, status = %s, records_ingested = %s, records_processed = %s, records_failed = %s
-                WHERE pipeline_run_id = %s;
-                """,
-                (end_time, "SUCCESS" if failed_count == 0 else "WARNING", ingested_count, processed_count, failed_count, run_id)
-            )
-            conn.commit()
-
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ETL Pipeline #{run_id} completed. Processed: {processed_count}, Failed: {failed_count}.")
 
 if __name__ == "__main__":
     run_etl_pipeline()

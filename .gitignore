@@ -26,3 +26,6 @@ dist-ssr/
 # Logs
 *.log
 backend.zip
+.env.example
+.env.example
+.env.example

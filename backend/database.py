@@ -1,34 +1,30 @@
-import re
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import declarative_base, sessionmaker
+from supabase import Client, create_client
 from backend.config import settings
 
-db_url = settings.DATABASE_URL
-# Automatically normalize postgresql:// to postgresql+psycopg:// if needed
-if db_url.startswith("postgresql://"):
-    db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+_supabase: Client | None = None
 
-engine = create_engine(
-    db_url,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+def get_supabase() -> Client:
+    global _supabase
+    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError(
+            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured"
+        )
+    if _supabase is None:
+        _supabase = create_client(
+            settings.SUPABASE_URL,
+            settings.SUPABASE_SERVICE_ROLE_KEY,
+        )
+    return _supabase
+
 
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    return get_supabase()
+
 
 def check_db_connection() -> bool:
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        get_supabase().table("pipeline_runs").select("pipeline_run_id").limit(1).execute()
         return True
-    except Exception as e:
+    except Exception:
         return False

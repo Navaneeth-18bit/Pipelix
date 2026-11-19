@@ -1,86 +1,70 @@
-import os
 import csv
-import sys
-from datetime import datetime
+import os
+from decimal import Decimal
+
 from dotenv import load_dotenv
-import psycopg
+
+from backend.database import get_supabase
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgresql@127.0.0.1:5432/pipelix_db")
 RAW_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "raw")
-PROJECT_ROOT = os.path.dirname(os.path.dirname(RAW_DATA_DIR))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
-# Normalize SQLAlchemy URL to psycopg connection string
-conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+
+def read_rows(filename):
+    with open(os.path.join(RAW_DATA_DIR, filename), "r", encoding="utf-8-sig", newline="") as file:
+        return list(csv.DictReader(file))
+
 
 def seed():
-    print(f"Connecting to database: {conn_str}")
-    with psycopg.connect(conn_str) as conn:
-        with conn.cursor() as cur:
-            # 1. Customers
-            cust_csv = os.path.join(RAW_DATA_DIR, "fluxora_customers.csv")
-            if os.path.exists(cust_csv):
-                with open(cust_csv, mode="r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        cur.execute(
-                            """
-                            INSERT INTO customers (customer_id, customer_name, email, city, country, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (customer_id) DO NOTHING;
-                            """,
-                            (row["customer_id"], row["customer_name"], row["email"], row["city"], row["country"], row["created_at"])
-                        )
-                print("Customers seeded.")
+    db = get_supabase()
 
-            # 2. Products
-            prod_csv = os.path.join(RAW_DATA_DIR, "fluxora_products.csv")
-            if os.path.exists(prod_csv):
-                with open(prod_csv, mode="r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        cur.execute(
-                            """
-                            INSERT INTO products (product_id, product_name, category, unit_price, created_at)
-                            VALUES (%s, %s, %s, %s, %s)
-                            ON CONFLICT (product_id) DO NOTHING;
-                            """,
-                            (row["product_id"], row["product_name"], row["category"], float(row["unit_price"]), row["created_at"])
-                        )
-                print("Products seeded.")
+    customers = read_rows("fluxora_customers.csv")
+    db.table("customers").upsert([
+        {
+            "customer_id": row["customer_id"].strip(),
+            "customer_name": row["customer_name"].strip(),
+            "email": row["email"].strip(),
+            "city": row["city"].strip(),
+            "country": row["country"].strip(),
+            "created_at": row["created_at"].strip(),
+        }
+        for row in customers
+    ], on_conflict="customer_id").execute()
 
-            # 3. Transactions
-            txn_csv = os.path.join(RAW_DATA_DIR, "fluxora_transactions.csv")
-            if os.path.exists(txn_csv):
-                with open(txn_csv, mode="r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        cur.execute(
-                            """
-                            INSERT INTO transactions (transaction_id, customer_id, product_id, transaction_date, quantity, unit_price, payment_method, location, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (transaction_id) DO NOTHING;
-                            """,
-                            (
-                                row["transaction_id"], row["customer_id"], row["product_id"],
-                                row["transaction_date"], int(row["quantity"]), float(row["unit_price"]),
-                                row["payment_method"], row["location"], row["created_at"]
-                            )
-                        )
-                print("Transactions seeded.")
+    products = read_rows("fluxora_products.csv")
+    db.table("products").upsert([
+        {
+            "product_id": row["product_id"].strip(),
+            "product_name": row["product_name"].strip(),
+            "category": row["category"].strip(),
+            "unit_price": float(Decimal(row["unit_price"])),
+            "created_at": row["created_at"].strip(),
+        }
+        for row in products
+    ], on_conflict="product_id").execute()
 
-        conn.commit()
-    print("Database seeding completed successfully.")
+    transactions = read_rows("fluxora_transactions.csv")
+    valid_transactions = []
+    for row in transactions:
+        quantity = int(row["quantity"])
+        unit_price = float(Decimal(row["unit_price"]))
+        if quantity <= 0 or unit_price <= 0:
+            raise ValueError(f"Invalid quantity or unit_price for transaction {row['transaction_id']}")
+        valid_transactions.append({
+            "transaction_id": row["transaction_id"].strip(),
+            "customer_id": row["customer_id"].strip(),
+            "product_id": row["product_id"].strip(),
+            "transaction_date": row["transaction_date"].strip(),
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "payment_method": row["payment_method"].strip(),
+            "location": (row.get("location") or "").strip() or None,
+            "created_at": row["created_at"].strip(),
+        })
+    db.table("transactions").upsert(valid_transactions, on_conflict="transaction_id").execute()
+    print(f"Seeded {len(customers)} customers, {len(products)} products, and {len(valid_transactions)} transactions.")
 
-    # Derive operational results from the three source tables.
-    from etl.data_pipeline import run_etl_pipeline
-    from ml.anomaly_detection import run_anomaly_detection
-
-    run_etl_pipeline()
-    run_anomaly_detection()
 
 if __name__ == "__main__":
     seed()

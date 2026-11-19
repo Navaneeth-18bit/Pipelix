@@ -1,78 +1,62 @@
-import os
 from datetime import datetime
+
 import numpy as np
 from sklearn.ensemble import IsolationForest
 from dotenv import load_dotenv
-import psycopg
+
+from backend.database import get_supabase
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgresql@127.0.0.1:5432/pipelix_db")
-conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
 
 def run_anomaly_detection():
-    """Detect unusual transactions using Isolation Forest ML model."""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Running ML Anomaly Detection...")
+    db = get_supabase()
+    response = db.table("transactions").select(
+        "transaction_id,quantity,unit_price,total_amount"
+    ).execute()
+    rows = response.data
+    if not rows:
+        print("No transactions found for anomaly detection.")
+        return
 
-    with psycopg.connect(conn_str) as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT transaction_id, quantity, unit_price, total_amount FROM transactions;")
-            rows = cur.fetchall()
+    features = []
+    transaction_ids = []
+    for row in rows:
+        quantity = float(row["quantity"])
+        unit_price = float(row["unit_price"])
+        total = float(row["total_amount"]) if row.get("total_amount") is not None else quantity * unit_price
+        transaction_ids.append(row["transaction_id"])
+        features.append([quantity, unit_price, total])
 
-            if not rows:
-                print("No transactions found for anomaly detection.")
-                return
+    model = IsolationForest(contamination=0.2, random_state=42)
+    predictions = model.fit_predict(np.array(features))
+    scores = model.decision_function(np.array(features))
 
-            txn_ids = [r[0] for r in rows]
-            # Convert to float features: quantity, unit_price, total_amount
-            features = []
-            for r in rows:
-                qty = float(r[1])
-                price = float(r[2])
-                total = float(r[3]) if r[3] is not None else (qty * price)
-                features.append([qty, price, total])
+    db.table("anomalies").delete().neq("anomaly_id", -1).execute()
+    anomaly_records = []
+    for transaction_id, prediction, score in zip(transaction_ids, predictions, scores):
+        is_anomaly = prediction == -1
+        anomaly_records.append({
+            "transaction_id": transaction_id,
+            "anomaly_score": round(float(score), 5),
+            "is_anomaly": bool(is_anomaly),
+            "model_name": "IsolationForest",
+            "model_version": "v1.0",
+            "detected_at": datetime.now().isoformat(),
+        })
+    db.table("anomalies").insert(anomaly_records).execute()
 
-            X = np.array(features)
+    detected = sum(record["is_anomaly"] for record in anomaly_records)
+    latest = db.table("pipeline_runs").select("pipeline_run_id").order(
+        "pipeline_run_id", desc=True
+    ).limit(1).execute()
+    if latest.data:
+        db.table("pipeline_runs").update({
+            "records_anomalous": detected,
+        }).eq("pipeline_run_id", latest.data[0]["pipeline_run_id"]).execute()
 
-            # Fit Isolation Forest
-            model = IsolationForest(contamination=0.2, random_state=42)
-            preds = model.fit_predict(X)  # -1 for anomaly, 1 for normal
-            scores = model.decision_function(X)  # lower = more abnormal
+    print(f"Detection complete. Anomalies detected: {detected} of {len(rows)} transactions.")
 
-            # Anomaly results are derived data, so recompute them for the current transactions.
-            cur.execute("DELETE FROM anomalies;")
-
-            anomalies_detected = 0
-            for txn_id, pred, score in zip(txn_ids, preds, scores):
-                is_anomaly = bool(pred == -1)
-                anomaly_score = round(float(score), 5)
-                if is_anomaly:
-                    anomalies_detected += 1
-
-                cur.execute(
-                    """
-                    INSERT INTO anomalies (transaction_id, anomaly_score, is_anomaly, model_name, model_version, detected_at)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (anomaly_id) DO NOTHING;
-                    """,
-                    (txn_id, anomaly_score, is_anomaly, "IsolationForest", "v1.0", datetime.now())
-                )
-
-            cur.execute(
-                """
-                UPDATE pipeline_runs
-                SET records_anomalous = %s
-                WHERE pipeline_run_id = (
-                    SELECT pipeline_run_id
-                    FROM pipeline_runs
-                    ORDER BY pipeline_run_id DESC
-                    LIMIT 1
-                );
-                """,
-                (anomalies_detected,),
-            )
-            conn.commit()
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Detection complete. Anomalies detected: {anomalies_detected} of {len(txn_ids)} transactions.")
 
 if __name__ == "__main__":
     run_anomaly_detection()

@@ -1,7 +1,7 @@
-transaction_id,customer_id,product_id,transaction_date,quantity,unit_price,total_amount,payment_method,location,created_at
-TXN_9007,CUST_006,PROD_106,2026-05-21 10:14,1,199.99,199.99,Credit Card,Web Store,2026-09-07 10:14
-TXN_9008,CUST_007,PROD_108,2026-05-09 11:40,3,24.5,73.5,Apple Pay,Mobile App,2026-05-09 11:40
-TXN_9009,CUST_008,PROD_110,2026-09-06 09:05,2,79.99,79.99,PayPal,Web Store,2026-09-06 09:05
-TXN_9010,CUST_009,PROD_107,2026-09-06 14:22,1,125.0,125.0,Credit Card,Web Store,2026-09-06 14:22
-TXN_9011,CUST_010,PROD_109,2026-07-09 16:50,2,590.0,590.0,Debit Card,Mobile App,2026-09-07 16:50
-TXN_9012,CUST_006,PROD_108,2026-09-27 08:30,1,24.5,24.5,Credit Card,Web Store,2026-09-27 08:30
+transaction_id,customer_id,product_id,,,,,,,
+TXN_9007,CUST_006,PROD_106,,,,,,,
+TXN_9008,CUST_007,PROD_108,,,,,,,
+TXN_9009,CUST_008,PROD_110,,,,,,,
+TXN_9010,CUST_009,PROD_107,,,,,,,
+TXN_9011,CUST_010,PROD_109,,,,,,,
+TXN_9012,CUST_006,PROD_108,,,,,,,
